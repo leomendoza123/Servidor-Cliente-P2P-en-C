@@ -9,10 +9,11 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <errno.h>
 
-char const *PORT ="8893";
+char const *PORT ="51705";
 char  *HOSTNAME = "localhost";
-char *DIRECTORIOACTUAL = "/share";
+char *CURRENTSERVERPATH ;
 
 
 // ClientSIde
@@ -23,18 +24,25 @@ void ClientConsole();
 void * Server();
 void dostuff(int);
 void error(const char *msg);
-void printdir(char *dir, int depth);
+char * getdir(char *dir_localitation);
+int dirExistens(char *dir_localitation);
 
 
-void client_scanArgs(char **parametros);
+
+
+
+
 
 int main(int argc, char *argv[]){
+    CURRENTSERVERPATH = malloc(sizeof("/share"));
+    CURRENTSERVERPATH = "/share";
     setbuf(stdin, NULL);
     setbuf(stdout, NULL);
     pthread_t server;
 
     // Se inicia el hilo de el servidor
     pthread_create(&server, NULL, Server, NULL);
+
     ClientConsole();
 
     return (0);
@@ -78,9 +86,11 @@ void ClientConsole() {
             // Borra los datos de validacion
 
         }
+        else if (!strcmp(action, "cd")) {
+            Client(1, parameter);
+        }
         else if (!strcmp(action, "quit")) {
             return;
-
         }
         else if (!strcmp(action, "get")) {
 
@@ -89,6 +99,7 @@ void ClientConsole() {
 
         }
         else if (!strcmp(action, "ls")) {
+            Client(4, NULL);
 
         }
         else if (!strcmp(action, "put")) {
@@ -99,7 +110,6 @@ void ClientConsole() {
             //TODO: devolver la forma de uso de los argument
             printf("Argumento invalido: \n");
         }
-        sleep (1);
     }
 }
 
@@ -110,7 +120,7 @@ int Client(int action, char *parameter)
     struct sockaddr_in serv_addr;
     struct hostent *server;
 
-    char buffer[256];
+    char buffer[1024];
 
     portno = atoi(PORT);
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -131,35 +141,57 @@ int Client(int action, char *parameter)
         error("ERROR connecting");
 
 
-    //_________________________________Conection PIN__________________
+    if (action==0) {
+        //Solicita funcion 0 (Pin)al server
+        bzero(buffer,1024);
+        strcat(buffer, "0");
+        n = write(sockfd, buffer, strlen(buffer));
+        if (n<0){
+            error("Error: writing on server");
+        }
+        bzero(buffer, 1024);
+        // Resive datos de solivitud
+        n = read(sockfd, buffer, 1024);
+        if (n<0){
+            error("Error: reading on server");
+        }
+        if (!strcmp (buffer,"0") ){
+            printf("Server: Conencted! \n");
+            }
+        }
 
-    if (action == 0) {
-            strcat(buffer, "0");
-            n = write(sockfd, buffer, strlen(buffer));
-            if (n < 0)
-                error("ERROR writing to socket");
-            bzero(buffer, 256);
-            n = read(sockfd, buffer, 255);
-            if (n < 0)
-                error("ERROR reading from socket");
-            printf("You are conencted!");
-            close(sockfd);
-            return 0;
+    if (action==4) {
+        //Solicita funcion 4 (ls) al server
+        bzero(buffer,1024);
+        strcat(buffer, "4");
+        n = write(sockfd, buffer, strlen(buffer));
+        bzero(buffer, 1024);
+        // Resive datos de solivitud
+        n = read(sockfd, buffer, 1024);
+        printf("Server: %s \n", buffer);
+
     }
-    if (action == 1) {
+
+    if (action==1) {
+        //Solicita funcion 1 (cd) al server
+        bzero(buffer,1024);
         strcat(buffer, "1");
         n = write(sockfd, buffer, strlen(buffer));
-        if (n < 0)
-            error("ERROR writing to socket");
-        bzero(buffer, 256);
-        n = read(sockfd, buffer, 255);
-        if (n < 0)
-            error("ERROR reading from socket");
-        printf("You are conencted!");
-        close(sockfd);
-        return 0;
+        bzero(buffer, 1024);
+        // Resive que el server lo escuche
+        n = read(sockfd, buffer, 1024);
+        // Envia direicion de directorio
+        bzero(buffer,1024);
+        strcat(buffer, parameter);
+        n = write(sockfd, buffer, strlen(buffer));
+        // Imprime resultado de servidor
+        bzero(buffer,1024);
+        n = read(sockfd, buffer, 1024);
+        printf("Server: %s", buffer);
+
     }
-    return 1;
+    close(sockfd);
+    return 0;
 
 
 }
@@ -182,7 +214,6 @@ void *Server() {
     socklen_t clilen;
     struct sockaddr_in serv_addr, cli_addr;
 
-
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0)
         error("ERROR opening socket");
@@ -195,13 +226,13 @@ void *Server() {
             sizeof(serv_addr)) < 0) {
         printf ("********************************************************************\n");
         printf ("*************** Port in use, ServerSide will not run ***************\n");
+        //close(sockfd);
         return 0;
     }
     listen(sockfd,5);
     clilen = sizeof(cli_addr);
-    printf ("********************************************************************\n");
-    printf("**********************Server online at port %s  ********************\n", PORT);
     while (1) {
+        printf ("%s", CURRENTSERVERPATH);
         newsockfd = accept(sockfd,
                 (struct sockaddr *) &cli_addr, &clilen);
         if (newsockfd < 0)
@@ -209,15 +240,15 @@ void *Server() {
         pid = fork();
         if (pid < 0)
             error("ERROR on fork");
-
+        if (pid == 0)  {
             close(sockfd);
             dostuff(newsockfd);
             exit(0);
-
-         close(newsockfd);
+        }
+        else close(newsockfd);
     } /* end of while */
     close(sockfd);
-    return  0;
+    return 0; /* we never get here */
 }
 
 /******** DOSTUFF() *********************
@@ -228,54 +259,105 @@ once a connnection has been established.
 
 void dostuff (int sock)
 {
+
     int n;
-    char buffer[256];
+    char buffer[1024];
 
-    bzero(buffer,256);
-
-
-    n = read(sock,buffer,255);
+    bzero(buffer,1024);
+    n = read(sock,buffer,1024);
     if (n < 0) error("ERROR reading from socket");
 
-    /// El cliente hace un pin
-    if (!strcmp(buffer, "0"))
-    {
-        printf("Client conected");
-        n = write(sock, "1", 1);
-        if (n < 0) error("ERROR writing to socket");
+    printf("Client request action #%s\n",buffer);
+
+    // ES UN PIN
+    if (!strcmp(buffer, "0")){
+        n = write(sock,"0",1);
+        if (n < 0)
+            error("ERROR writing to socket");
+
     }
-    if (!strcmp(buffer, "1"))
-    {
-        printf("Client conected");
-        n = write(sock, "1", 1);
-        if (n < 0) error("ERROR writing to socket");
+
+    // ES UN LS
+    if (!strcmp(buffer, "4")){
+        printf ("%s",CURRENTSERVERPATH);
+        char * dirString= getdir(CURRENTSERVERPATH);
+        printf ("%s %d \n",dirString, (int)strlen(dirString));
+        n = write(sock,dirString,strlen(dirString));
+        if (n < 0)
+            error("ERROR writing to socket");
+
+    }
+
+
+    // ES UN DR
+    if (!strcmp(buffer, "1")){
+        //Solicita el nuevo directorio
+        n = write(sock,"0",1);
+        bzero(buffer,1024);
+        n = read(sock,buffer,255);
+        char *Nuevodirectorio = buffer;
+        if (dirExistens(Nuevodirectorio)==1){
+
+            printf ("%s \n", Nuevodirectorio);
+            CURRENTSERVERPATH = calloc (strlen (Nuevodirectorio), sizeof(char *));
+            strcpy (CURRENTSERVERPATH,Nuevodirectorio);
+            printf ("%s \n",CURRENTSERVERPATH);
+            n = write(sock,"Ok",2);
+        }
+        else{
+            n = write(sock,"Invalid directory",17);
+        }
+
+
+
     }
 }
 
 
 
-void printdir(char *dir, int depth) {
-    DIR *dp;
-    struct dirent *entry;
-    struct stat statbuf;
-    if((dp = opendir(dir)) == NULL) {
-        fprintf(stderr,"cannot open directory: %s\n", dir);
-        return;
-    }
-    chdir(dir);
-    while((entry = readdir(dp)) != NULL) {
-        lstat(entry->d_name,&statbuf);
-        if(S_ISDIR(statbuf.st_mode)) {
-            /* Found a directory, but ignore . and .. */
-            if(strcmp(".",entry->d_name) == 0 ||
-                    strcmp("..",entry->d_name) == 0)
-                continue;
-            printf("%*s%s/\n",depth,"",entry->d_name);
-            /* Recurse at a new indent level */
-            printdir(entry->d_name,depth+4);
+char *getdir(char *dir_localitation) {
+    //TODO Mostrar de forma diferente cuando se obtiene un archivo o cuando se obtiene un directorio
+    char *directoriString="";
+    DIR *dir;
+    struct dirent *ent;
+    if ((dir = opendir (dir_localitation)) != NULL) {
+        /* print all the files and directories within directory */
+        while ((ent = readdir (dir)) != NULL) {
+           if (!(ent->d_name [0]=='.'))
+            {
+
+                char *temp = malloc(strlen(ent->d_name) + 4 + strlen(directoriString));
+                strcat(temp, directoriString);
+                strcat(temp, ent->d_name);
+                strcat(temp, " / ");
+                directoriString = temp;
+            }
         }
-        else printf("%*s%s\n",depth,"",entry->d_name);
+        closedir (dir);
+    } else {
+        /* could not open directory */
+        perror ("");
     }
-    chdir("..");
-    closedir(dp);
+    return directoriString;
+}
+
+
+int dirExistens(char *dir_localitation) {
+    struct stat s;
+    int err = stat(dir_localitation, &s);
+    if(-1 == err) {
+        if(ENOENT == errno) {
+            return 0;
+        } else {
+            perror("stat");
+            exit(1);
+        }
+    } else {
+        if(S_ISDIR(s.st_mode)) {
+            return 1;
+        } else {
+           return 0;
+        }
+    }
+    return -1;
 }
