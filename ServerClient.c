@@ -11,14 +11,19 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-char const *PORT ="51705";
+char const *PORT ="51606";
 char  *HOSTNAME = "localhost";
 char *CURRENTSERVERPATH ;
+char *CURRENTCLIENTPATH ;
 
 
 // ClientSIde
 int Client(int action, char *parameter);
 void ClientConsole();
+
+void sendMsgToServer(int sockfd, char buffer[], char *parameter);
+
+void reciveMsgFromServer( int sockfd,  char buffer[]);
 
 ///ServerSide
 void * Server();
@@ -28,14 +33,13 @@ char * getdir(char *dir_localitation);
 int dirExistens(char *dir_localitation);
 
 
+void sendMsgToClient(int sock, char buffer[], char *parameter);
 
-
-
-
+void reciveMsgFromClient(int sock, char buffer[]);
 
 int main(int argc, char *argv[]){
-    CURRENTSERVERPATH = malloc(sizeof("/share"));
     CURRENTSERVERPATH = "/share";
+    CURRENTCLIENTPATH = "/home/leoanardo/Desktop";
     setbuf(stdin, NULL);
     setbuf(stdout, NULL);
     pthread_t server;
@@ -93,6 +97,7 @@ void ClientConsole() {
             return;
         }
         else if (!strcmp(action, "get")) {
+            Client(2, parameter);
 
         }
         else if (!strcmp(action, "lcd")) {
@@ -190,10 +195,80 @@ int Client(int action, char *parameter)
         printf("Server: %s", buffer);
 
     }
+
+    if (action==2) {
+        //Accion get
+        sendMsgToServer(sockfd, buffer, "2");
+        //Espera a estar siendo escuchado
+        reciveMsgFromServer(sockfd, buffer);
+        // Envia nombre del archivo
+        sendMsgToServer(sockfd, buffer, parameter);
+        // resive resultado de exitencia
+        reciveMsgFromServer(sockfd, buffer);
+
+        FILE *file;
+
+        //TODO que el archivo no se cree si no existe en el server
+        char filepath [1024];
+        strcpy(filepath, CURRENTCLIENTPATH);
+        strcat(filepath, "/");
+        strcat(filepath, parameter);
+
+
+
+        int tamanoTotal = 0;
+
+        int tamanoDepieza;
+
+        while (strcmp(buffer, "0")) {
+            tamanoDepieza = atoi(buffer);
+            file = fopen(filepath, "a");
+            // Pide siguiente pedaso
+            sendMsgToServer(sockfd, buffer, "11");
+            // Resive pedaso
+            reciveMsgFromServer(sockfd, buffer);
+
+
+            //printf("Server: %s", buffer);
+            printf ("\n Resivido %d",  tamanoDepieza);
+            tamanoTotal += tamanoDepieza;
+
+            fwrite(buffer, 1, tamanoDepieza, file);
+
+            // Pregunta si falta
+            sendMsgToServer(sockfd, buffer, "12");
+            // Resive respuesta
+            reciveMsgFromServer(sockfd, buffer);
+            fclose (file);
+        }
+        printf ("Tamaño resivido %d", tamanoTotal);
+        bzero (filepath,1024);
+
+
+
+
+    }
     close(sockfd);
     return 0;
 
 
+}
+
+void reciveMsgFromServer(int sockfd, char buffer[]) {
+    int n;
+    bzero(buffer, 1024);
+    n = read(sockfd, buffer, 1024);
+    if (n < 0)
+        error("ERROR writing to socket");
+}
+
+void sendMsgToServer(int sockfd, char buffer[], char *parameter ) {
+    int n;
+    bzero(buffer,1024);
+    strcat(buffer, parameter);
+    n = write(sockfd, buffer, strlen(buffer));
+    if (n < 0)
+        error("ERROR writing to socket");
 }
 
 
@@ -210,7 +285,7 @@ void error(const char *msg) {
 }
 
 void *Server() {
-    int sockfd, newsockfd, portno, pid;
+    int sockfd, newsockfd, portno;//, pid;
     socklen_t clilen;
     struct sockaddr_in serv_addr, cli_addr;
 
@@ -232,20 +307,19 @@ void *Server() {
     listen(sockfd,5);
     clilen = sizeof(cli_addr);
     while (1) {
-        printf ("%s", CURRENTSERVERPATH);
         newsockfd = accept(sockfd,
                 (struct sockaddr *) &cli_addr, &clilen);
         if (newsockfd < 0)
             error("ERROR on accept");
-        pid = fork();
-        if (pid < 0)
-            error("ERROR on fork");
-        if (pid == 0)  {
-            close(sockfd);
+        //pid = fork();
+        //if (pid < 0)
+          //  error("ERROR on fork");
+        //if (pid == 0)  {
+       //     close(sockfd);
             dostuff(newsockfd);
-            exit(0);
-        }
-        else close(newsockfd);
+         //   exit(0);
+        //}
+       // else close(newsockfd);
     } /* end of while */
     close(sockfd);
     return 0; /* we never get here */
@@ -291,7 +365,7 @@ void dostuff (int sock)
 
     // ES UN DR
     if (!strcmp(buffer, "1")){
-        //Solicita el nuevo directorio
+        //Solicita el nuevo directorioc
         n = write(sock,"0",1);
         bzero(buffer,1024);
         n = read(sock,buffer,255);
@@ -311,8 +385,77 @@ void dostuff (int sock)
 
 
     }
+
+    // ES UN get
+    if (!strcmp(buffer, "2")){
+        //Envia Acepta entrada
+        sendMsgToClient(sock, buffer, "1");
+        //Recive nombre de archivo
+        reciveMsgFromClient(sock, buffer);
+        printf("%s", buffer);
+        // Abre archivo
+        FILE *file;
+        char filepath [1024];
+        strcat(filepath, CURRENTSERVERPATH);
+        strcat(filepath, "/");
+        strcat(filepath, buffer);
+        file = fopen(filepath, "rb");
+        bzero (filepath,1024);
+        printf ("Archivo por abrir %s", filepath);
+        if (file!=0) {
+
+            int bytesLeidos;
+            char filebuf[1024];
+            int totalsize = 0;
+            while((bytesLeidos = fread(filebuf, 1, 1000, file))){
+                    printf ("\n Archivo exite leyendo %d bytes", bytesLeidos);
+                    // Envia tamaño de pieza
+                    char sizeString[10];
+                    snprintf(sizeString, 10, "%d", bytesLeidos);
+                    sendMsgToClient(sock, buffer, sizeString);
+                    // Recive cliente listo para recivir archivo
+                    reciveMsgFromClient(sock, buffer);
+                    // Envia pieza de archivo
+                    n = write(sock,filebuf, bytesLeidos);
+                    bzero(filebuf,1024);
+                    // Resive pregunta si falta
+                    reciveMsgFromClient(sock, buffer);
+                    totalsize+= bytesLeidos;
+
+            }
+            printf ("\n Tamaño total %d bites", totalsize);
+            fclose(file);
+            }
+
+        // Envia arhibo no abierto o terminado
+        sendMsgToClient(sock, buffer, "0");
+
+
+    }
+
+
+
+
+
+    }
+
+
+void reciveMsgFromClient(int sock, char buffer[]) {
+    int n;
+    bzero(buffer,1024);
+    n = read(sock,buffer,255);
+    if (n < 0)
+        error("ERROR writing to socket");
 }
 
+void sendMsgToClient(int sock, char buffer[], char *parameter) {
+    int n;
+    bzero(buffer,1024);
+    strcat(buffer, parameter);
+    n = write(sock,buffer, strlen(buffer));
+    if (n < 0)
+        error("ERROR writing to socket");
+}
 
 
 char *getdir(char *dir_localitation) {
