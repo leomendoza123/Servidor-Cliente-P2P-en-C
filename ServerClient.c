@@ -80,7 +80,7 @@ void ClientConsole() {
 
 
         if (!strcmp(action, "open")) {
-            //HOSTNAME = parameter;
+            // localhost$mario$admin123
             Client(0, NULL);
             //TODO hacer proceso de validacion
             // Este puede ser un string usuario y contraseña antes de cada llamada
@@ -102,14 +102,12 @@ void ClientConsole() {
         }
         else if (!strcmp(action, "lcd")) {
 
-            // TODO REVISA SI FUCIONA
+            // TODO REVISA SI FUCIO
             char *Nuevodirectorio = parameter;
             if (dirExistens(Nuevodirectorio)==1){
 
-                printf ("%s \n", Nuevodirectorio);
                 CURRENTCLIENTPATH = calloc (strlen (Nuevodirectorio), sizeof(char *));
                 strcpy (CURRENTCLIENTPATH,Nuevodirectorio);
-                printf ("%s \n",CURRENTCLIENTPATH);
                 printf ("Nuevo directorio loca: %s", CURRENTCLIENTPATH );
             }
             else{
@@ -244,7 +242,7 @@ int Client(int action, char *parameter)
 
 
             //printf("Server: %s", buffer);
-            printf ("\n Resivido %d",  tamanoDepieza);
+            printf ("\n Recibido %d",  tamanoDepieza);
             tamanoTotal += tamanoDepieza;
 
             fwrite(buffer, 1, tamanoDepieza, file);
@@ -255,7 +253,7 @@ int Client(int action, char *parameter)
             reciveMsgFromServer(sockfd, buffer);
             fclose (file);
         }
-        printf ("Tamaño resivido %d", tamanoTotal);
+        printf ("Tamaño recibido %d", tamanoTotal);
         bzero (filepath,1024);
 
 
@@ -362,6 +360,8 @@ void dostuff (int sock)
         n = write(sock,"0",1);
         if (n < 0)
             error("ERROR writing to socket");
+        bzero(buffer,1024);
+
 
     }
 
@@ -377,7 +377,7 @@ void dostuff (int sock)
     }
 
 
-    // ES UN DR
+    // ES UN CD
     if (!strcmp(buffer, "1")){
         //Solicita el nuevo directorioc
         n = write(sock,"0",1);
