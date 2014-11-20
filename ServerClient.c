@@ -133,7 +133,15 @@ void ClientConsole() {
     while ("true") {
 
 
-        printf("\n \n *** Welcome to P2P file manager ***\n");
+        printf("\n \n *** Welcome to P2P file manager ***");
+        if (sockfd == 0){
+            printf ("Status: Offline :( \n");
+            printf ("command: open <host>@<user>$<pass>$<path> \n");
+        }
+        else{
+            printf ("Status: Online :) \n");
+            printf ("command: ls, quit, close, cd <path>, lcd<path>, pwd, get<file>, put<file>\n");
+        }
         char action[256];
         char parameter[256];
         bzero(action, 256);
@@ -144,7 +152,7 @@ void ClientConsole() {
         parameter[strlen(parameter) - 1] = '\0';
 
 
-        if (!strcmp(action, "open")) {
+        if (!strcmp(action, "open") && sockfd==0) {
             sockfd = ClientConect(parameter);
         }
         else if (sockfd!=0) {
@@ -433,10 +441,18 @@ int ClientConect(char *HostUserPassPath) {
         read(sockfd, buffer, 1024);
 
         //TODO compara el output resivido, segun eso devulve o no el socket o lo cierra
-        // close(sockfd);
+        if (buffer[0] == 'A'){
+            printf("%s\n", buffer);
+            return sockfd;
 
-        printf("%s\n", buffer);
-        return sockfd;
+        }
+        else{
+            printf("%s\n", buffer);
+            return 0;
+
+        }
+
+
 
 
 
