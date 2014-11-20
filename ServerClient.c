@@ -102,6 +102,20 @@ void ClientConsole() {
         }
         else if (!strcmp(action, "lcd")) {
 
+            // TODO REVISA SI FUCIONA
+            char *Nuevodirectorio = parameter;
+            if (dirExistens(Nuevodirectorio)==1){
+
+                printf ("%s \n", Nuevodirectorio);
+                CURRENTCLIENTPATH = calloc (strlen (Nuevodirectorio), sizeof(char *));
+                strcpy (CURRENTCLIENTPATH,Nuevodirectorio);
+                printf ("%s \n",CURRENTCLIENTPATH);
+                printf ("Nuevo directorio loca: %s", CURRENTCLIENTPATH );
+            }
+            else{
+                printf ("Directorio loca: %s, no existe", parameter );
+            }
+
         }
         else if (!strcmp(action, "ls")) {
             Client(4, NULL);
