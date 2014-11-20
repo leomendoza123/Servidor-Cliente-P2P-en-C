@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-char const *PORT ="51004";
+char const *PORT ="51005";
 char  *HOSTNAME = "localhost";
 char *CURRENTSERVERPATH ;
 char *CURRENTCLIENTPATH ;
@@ -133,7 +133,7 @@ void ClientConsole() {
     while ("true") {
 
 
-        printf("*** Welcome to P2P file manager ***\n");
+        printf("\n \n *** Welcome to P2P file manager ***\n");
         char action[256];
         char parameter[256];
         bzero(action, 256);
@@ -189,6 +189,10 @@ void ClientConsole() {
                 Client(3, parameter, sockfd);
 
             }
+            else if (!strcmp(action, "pwd")) {
+                Client(5, parameter, sockfd);
+
+            }
             else {
                 //TODO: devolver la forma de uso de los argument
                 printf("Argumento invalido: \n");
@@ -223,7 +227,7 @@ int Client(int action, char *parameter,  int sockfd) {
         bzero(buffer, 1024);
         // Resive datos de solivitud
         read(sockfd, buffer, 1024);
-        printf("Server: %s \n", buffer);
+        printf("\n Server: %s \n", buffer);
 
     }
 
@@ -242,7 +246,19 @@ int Client(int action, char *parameter,  int sockfd) {
         // Imprime resultado de servidor
         bzero(buffer,1024);
         read(sockfd, buffer, 1024);
-        printf("Server: %s", buffer);
+        printf("\n Server: %s", buffer);
+
+    }
+
+    if (action==5) {
+        //Solicita funcion pwd
+        bzero(buffer,1024);
+        strcat(buffer, "5");
+        write(sockfd, buffer, strlen(buffer));
+        bzero(buffer, 1024);
+        // Resive direccion de directorio
+        read(sockfd, buffer, 1024);
+        printf("\n Server: %s", buffer);
 
     }
 
@@ -279,8 +295,6 @@ int Client(int action, char *parameter,  int sockfd) {
             reciveMsgFromServer(sockfd, buffer);
 
 
-            //printf("Server: %s", buffer);
-            printf ("\n Recibido %d",  tamanoDepieza);
             tamanoTotal += tamanoDepieza;
 
             fwrite(buffer, 1, tamanoDepieza, file);
@@ -291,7 +305,7 @@ int Client(int action, char *parameter,  int sockfd) {
             reciveMsgFromServer(sockfd, buffer);
             fclose (file);
         }
-        printf ("Tamaño recibido %d", tamanoTotal);
+        printf ("\n Tamaño recibido %d", tamanoTotal);
         bzero (filepath,1024);
 
 
@@ -480,20 +494,21 @@ void *Server() {
     }
     listen(sockfd,5);
     clilen = sizeof(cli_addr);
+    int pid;
     while (1) {
         newsockfd = accept(sockfd,
                 (struct sockaddr *) &cli_addr, &clilen);
         if (newsockfd < 0)
             error("ERROR on accept");
-        //pid = fork();
-        //if (pid < 0)
-          //  error("ERROR on fork");
-        //if (pid == 0)  {
-       //     close(sockfd);
+        pid = fork();
+        if (pid < 0)
+            error("ERROR on fork");
+        if (pid == 0)  {
+            close(sockfd);
             dostuff(newsockfd);
-         //   exit(0);
-        //}
-       // else close(newsockfd);
+            exit(0);
+        }
+       else close(newsockfd);
     } /* end of while */
     close(sockfd);
     return 0; /* we never get here */
@@ -580,6 +595,13 @@ void dostuff (int sock) {
             }
 
 
+        }
+
+        // ES UN PWD
+        if (!strcmp(buffer, "5")) {
+            //Solicita el nuevo directorioc
+            sendMsg(sock, buffer, CURRENTSERVERPATH);
+            bzero(buffer, 1024);
         }
 
         // ES UN get
